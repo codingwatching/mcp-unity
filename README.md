@@ -241,6 +241,13 @@ Installing this MCP Unity Server is a multi-step process:
 
 ![image](docs/configure.jpg)
 
+> **Global vs. Project configuration:**
+   > - **Configure \[Client\]** — writes to your global user config file (e.g. `~/.claude.json`). Uses an absolute path. Applies to all projects on your machine. Best for personal, single-developer setups.
+   > - **Configure \[Client\] (Project)** — writes to a `.mcp.json` file (or equivalent) in the Unity project root. Uses a relative path, so it works across machines. Intended to be committed to git and shared with the team. Best for collaborative projects or when you want the config to travel with the project.
+   >
+   > If in doubt, prefer the **(Project)** variant — the relative path is more portable and won't break if you move your project folder.
+
+
 4. Confirm the configuration installation with the given popup
 
 ![image](https://github.com/user-attachments/assets/b1f05d33-3694-4256-a57b-8556005021ba)
