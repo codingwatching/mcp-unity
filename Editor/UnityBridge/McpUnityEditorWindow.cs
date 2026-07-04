@@ -78,8 +78,9 @@ namespace McpUnity.Unity
             
             McpUnitySettings settings = McpUnitySettings.Instance;
             McpUnityServer mcpUnityServer = McpUnityServer.Instance;
-            string statusText = mcpUnityServer.IsListening ? "Server Online" : "Server Offline";
-            Color statusColor = mcpUnityServer.IsListening  ? Color.green : Color.red;
+            bool hasScheduledStart = mcpUnityServer.HasScheduledStart;
+            string statusText = hasScheduledStart ? mcpUnityServer.ScheduledStartStatus : (mcpUnityServer.IsListening ? "Server Online" : "Server Offline");
+            Color statusColor = hasScheduledStart ? Color.yellow : (mcpUnityServer.IsListening ? Color.green : Color.red);
             
             GUIStyle statusStyle = new GUIStyle(EditorStyles.boldLabel);
             statusStyle.normal.textColor = statusColor;
@@ -162,14 +163,14 @@ namespace McpUnity.Unity
             EditorGUILayout.BeginHorizontal();
             
             // Connect button - enabled only when disconnected
-            GUI.enabled = !mcpUnityServer.IsListening;
+            GUI.enabled = !mcpUnityServer.IsListening && !hasScheduledStart;
             if (GUILayout.Button("Start Server", GUILayout.Height(30)))
             {
                 mcpUnityServer.StartServer();
             }
             
             // Disconnect button - enabled only when connected
-            GUI.enabled = mcpUnityServer.IsListening;
+            GUI.enabled = mcpUnityServer.IsListening || hasScheduledStart;
             if (GUILayout.Button("Stop Server", GUILayout.Height(30)))
             {
                 mcpUnityServer.StopServer();

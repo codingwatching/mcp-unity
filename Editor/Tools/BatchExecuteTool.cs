@@ -16,11 +16,16 @@ namespace McpUnity.Tools
     /// </summary>
     public class BatchExecuteTool : McpToolBase
     {
-        private readonly McpUnityServer _server;
+        private readonly Func<string, McpToolBase> _getTool;
 
         public BatchExecuteTool(McpUnityServer server)
+            : this(name => server != null && server.TryGetTool(name, out McpToolBase tool) ? tool : null)
         {
-            _server = server;
+        }
+
+        public BatchExecuteTool(Func<string, McpToolBase> getTool)
+        {
+            _getTool = getTool ?? (_ => null);
             Name = "batch_execute";
             Description = "Executes multiple tool operations in a single batch request. Reduces round-trips and enables atomic operations.";
             IsAsync = true;
@@ -119,7 +124,8 @@ namespace McpUnity.Tools
                 }
 
                 // Get the tool
-                if (!_server.TryGetTool(toolName, out McpToolBase tool))
+                McpToolBase tool = _getTool(toolName);
+                if (tool == null)
                 {
                     results.Add(CreateOperationResult(i, operationId, false, null, $"Unknown tool: {toolName}"));
                     failed++;
