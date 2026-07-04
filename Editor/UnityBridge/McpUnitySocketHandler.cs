@@ -145,7 +145,13 @@ namespace McpUnity.Unity
             // Remove the client from the server
             _server.Clients.TryRemove(ID, out _);
 
-            McpLogger.LogInfo($"WebSocket client '{clientName}' disconnected: {e.Reason} (Remaining clients: {_server.Clients.Count})");
+            string reason = e.Reason;
+            if (reason == "An exception has occurred while receiving.")
+            {
+                reason = "connection closed by client";
+            }
+
+            McpLogger.LogInfo($"WebSocket client '{clientName}' disconnected: {reason} (Remaining clients: {_server.Clients.Count})");
         }
 
         /// <summary>

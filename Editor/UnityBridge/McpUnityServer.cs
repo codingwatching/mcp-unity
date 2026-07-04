@@ -288,6 +288,7 @@ namespace McpUnity.Unity
                 int connectionGeneration = Interlocked.Increment(ref _connectionGeneration);
                 var host = McpUnitySettings.Instance.AllowRemoteConnections ? "0.0.0.0" : "localhost";
                 webSocketServer = new WebSocketServer($"ws://{host}:{McpUnitySettings.Instance.Port}");
+                webSocketServer.Log.Output = (data, path) => { };
                 webSocketServer.AddWebSocketService("/McpUnity", () => new McpUnitySocketHandler(this, connectionGeneration));
                 webSocketServer.Start();
                 _webSocketServer = webSocketServer;

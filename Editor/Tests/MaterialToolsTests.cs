@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
 using McpUnity.Tools;
+using McpUnity.Utils;
 using UnityEngine;
 using UnityEngine.TestTools;
 using UnityEditor;
@@ -537,7 +538,7 @@ namespace McpUnity.Tests
                 AssignMaterialTool tool = new AssignMaterialTool();
                 JObject parameters = new JObject
                 {
-                    ["instanceId"] = testObj.GetInstanceID(),
+                    ["instanceId"] = UnityObjectId.GetObjectId(testObj),
                     ["materialPath"] = "Assets/NonExistent/Material.mat"
                 };
 
@@ -573,7 +574,7 @@ namespace McpUnity.Tests
                 AssignMaterialTool tool = new AssignMaterialTool();
                 JObject parameters = new JObject
                 {
-                    ["instanceId"] = testObj.GetInstanceID(),
+                    ["instanceId"] = UnityObjectId.GetObjectId(testObj),
                     ["materialPath"] = _testMaterialPath,
                     ["slot"] = 0
                 };
@@ -611,7 +612,7 @@ namespace McpUnity.Tests
                 AssignMaterialTool tool = new AssignMaterialTool();
                 JObject parameters = new JObject
                 {
-                    ["instanceId"] = testObj.GetInstanceID(),
+                    ["instanceId"] = UnityObjectId.GetObjectId(testObj),
                     ["materialPath"] = _testMaterialPath,
                     ["slot"] = 99 // Invalid slot for a cube with 1 material
                 };
@@ -646,7 +647,7 @@ namespace McpUnity.Tests
                 AssignMaterialTool tool = new AssignMaterialTool();
                 JObject parameters = new JObject
                 {
-                    ["instanceId"] = testObj.GetInstanceID(),
+                    ["instanceId"] = UnityObjectId.GetObjectId(testObj),
                     ["materialPath"] = _testMaterialPath
                 };
 

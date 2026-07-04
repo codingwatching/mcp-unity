@@ -2,6 +2,7 @@ using System;
 using UnityEngine;
 using UnityEditor;
 using McpUnity.Unity;
+using McpUnity.Utils;
 using Newtonsoft.Json.Linq;
 
 namespace McpUnity.Tools
@@ -26,7 +27,7 @@ namespace McpUnity.Tools
 
             if (instanceId.HasValue)
             {
-                gameObject = EditorUtility.InstanceIDToObject(instanceId.Value) as GameObject;
+                gameObject = UnityObjectId.ObjectFromId(instanceId.Value) as GameObject;
                 identifierInfo = $"instance ID {instanceId.Value}";
             }
             else if (!string.IsNullOrEmpty(objectPath))
@@ -150,7 +151,7 @@ namespace McpUnity.Tools
             GameObject newParent = null;
             if (newParentId.HasValue)
             {
-                newParent = EditorUtility.InstanceIDToObject(newParentId.Value) as GameObject;
+                newParent = UnityObjectId.ObjectFromId(newParentId.Value) as GameObject;
                 if (newParent == null)
                 {
                     return McpUnitySocketHandler.CreateErrorResponse(
@@ -200,7 +201,7 @@ namespace McpUnity.Tools
 
                 duplicatedObjects.Add(new JObject
                 {
-                    ["instanceId"] = duplicate.GetInstanceID(),
+                    ["instanceId"] = UnityObjectId.GetObjectId(duplicate),
                     ["name"] = duplicate.name,
                     ["path"] = GameObjectToolUtils.GetGameObjectPath(duplicate)
                 });
@@ -317,7 +318,7 @@ namespace McpUnity.Tools
             }
             else if (newParentId.HasValue)
             {
-                GameObject newParent = EditorUtility.InstanceIDToObject(newParentId.Value) as GameObject;
+                GameObject newParent = UnityObjectId.ObjectFromId(newParentId.Value) as GameObject;
                 if (newParent == null)
                 {
                     return McpUnitySocketHandler.CreateErrorResponse(
@@ -373,7 +374,7 @@ namespace McpUnity.Tools
                     ["success"] = true,
                     ["type"] = "text",
                     ["message"] = $"GameObject '{targetObject.name}' is already at the root level.",
-                    ["instanceId"] = targetObject.GetInstanceID(),
+                    ["instanceId"] = UnityObjectId.GetObjectId(targetObject),
                     ["name"] = targetObject.name,
                     ["path"] = oldPath,
                     ["changed"] = false
@@ -387,7 +388,7 @@ namespace McpUnity.Tools
                     ["success"] = true,
                     ["type"] = "text",
                     ["message"] = $"GameObject '{targetObject.name}' is already a child of the specified parent.",
-                    ["instanceId"] = targetObject.GetInstanceID(),
+                    ["instanceId"] = UnityObjectId.GetObjectId(targetObject),
                     ["name"] = targetObject.name,
                     ["path"] = oldPath,
                     ["changed"] = false
@@ -418,7 +419,7 @@ namespace McpUnity.Tools
                 ["success"] = true,
                 ["type"] = "text",
                 ["message"] = $"Successfully reparented GameObject '{targetObject.name}' to {parentDescription}.",
-                ["instanceId"] = targetObject.GetInstanceID(),
+                ["instanceId"] = UnityObjectId.GetObjectId(targetObject),
                 ["name"] = targetObject.name,
                 ["oldPath"] = oldPath,
                 ["newPath"] = newPath,

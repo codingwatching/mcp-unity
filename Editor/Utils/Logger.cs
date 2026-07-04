@@ -18,7 +18,7 @@ namespace McpUnity.Utils
         {
             if (McpUnitySettings.Instance.EnableInfoLogs)
             {
-                Debug.Log($"{LogPrefix}{message}");
+                Debug.LogFormat(LogType.Log, LogOption.NoStacktrace, null, "{0}{1}", LogPrefix, message);
             }
         }
         

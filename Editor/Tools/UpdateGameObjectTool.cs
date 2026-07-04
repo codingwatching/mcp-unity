@@ -45,7 +45,7 @@ namespace McpUnity.Tools
             // Identify or create the GameObject by instanceId or objectPath
             if (instanceId.HasValue)
             {
-                targetGameObject = EditorUtility.InstanceIDToObject(instanceId.Value) as GameObject;
+                targetGameObject = UnityObjectId.ObjectFromId(instanceId.Value) as GameObject;
                 identifierInfo = $"instance ID {instanceId.Value}";
             }
             else if (!string.IsNullOrEmpty(objectPath))
@@ -135,7 +135,7 @@ namespace McpUnity.Tools
                 ["message"] = propertiesUpdated
                     ? $"GameObject '{targetGameObject.name}' (identified by {identifierInfo}) updated successfully."
                     : $"No properties were changed for GameObject '{targetGameObject.name}' (identified by {identifierInfo}).",
-                ["instanceId"] = targetGameObject.GetInstanceID(),
+                ["instanceId"] = UnityObjectId.GetObjectId(targetGameObject),
                 ["name"] = targetGameObject.name,
                 ["path"] = GetGameObjectPath(targetGameObject)
             };

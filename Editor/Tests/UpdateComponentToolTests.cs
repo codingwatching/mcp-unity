@@ -1,5 +1,6 @@
 using System;
 using McpUnity.Tools;
+using McpUnity.Utils;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEditor;
@@ -54,7 +55,7 @@ namespace McpUnity.Tests
 
             JObject result = tool.Execute(new JObject
             {
-                ["instanceId"] = _gameObject.GetInstanceID(),
+                ["instanceId"] = UnityObjectId.GetObjectId(_gameObject),
                 ["componentName"] = nameof(DerivedUpdateComponentToolTestComponent),
                 ["componentData"] = new JObject
                 {
@@ -74,7 +75,7 @@ namespace McpUnity.Tests
 
             JObject result = tool.Execute(new JObject
             {
-                ["instanceId"] = _gameObject.GetInstanceID(),
+                ["instanceId"] = UnityObjectId.GetObjectId(_gameObject),
                 ["componentName"] = nameof(UpdateComponentToolTestComponent),
                 ["componentData"] = new JObject
                 {
@@ -95,7 +96,7 @@ namespace McpUnity.Tests
 
             JObject result = tool.Execute(new JObject
             {
-                ["instanceId"] = _gameObject.GetInstanceID(),
+                ["instanceId"] = UnityObjectId.GetObjectId(_gameObject),
                 ["componentName"] = nameof(UpdateComponentToolTestComponent),
                 ["componentData"] = new JObject
                 {
