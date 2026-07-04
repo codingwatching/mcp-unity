@@ -261,21 +261,31 @@ export class McpUnity {
   private handleMessage(data: string): void {
     try {
       const response = JSON.parse(data) as UnityResponse;
+      const pendingCount = this.pendingRequests.size;
 
-      if (response.id && this.pendingRequests.has(response.id)) {
-        const request = this.pendingRequests.get(response.id)!;
-        clearTimeout(request.timeout);
-        this.pendingRequests.delete(response.id);
+      if (!response.id) {
+        this.logger.warn(`Ignoring Unity WebSocket message without request id; pending requests: ${pendingCount}`);
+        return;
+      }
 
-        if (response.error) {
-          request.reject(new McpUnityError(
-            ErrorType.TOOL_EXECUTION,
-            response.error.message || 'Unknown error',
-            response.error.details
-          ));
-        } else {
-          request.resolve(response.result);
-        }
+      if (!this.pendingRequests.has(response.id)) {
+        this.logger.warn(`Ignoring Unity response for unknown request ${response.id}; pending requests: ${pendingCount}`);
+        return;
+      }
+
+      this.logger.info(`Received Unity response for request ${response.id}; pending requests before match: ${pendingCount}`);
+      const request = this.pendingRequests.get(response.id)!;
+      clearTimeout(request.timeout);
+      this.pendingRequests.delete(response.id);
+
+      if (response.error) {
+        request.reject(new McpUnityError(
+          ErrorType.TOOL_EXECUTION,
+          response.error.message || 'Unknown error',
+          response.error.details
+        ));
+      } else {
+        request.resolve(response.result);
       }
     } catch (e) {
       this.logger.error(`Error parsing WebSocket message: ${e instanceof Error ? e.message : String(e)}`);
@@ -430,6 +440,7 @@ export class McpUnity {
       }, timeoutMs);
 
       // Store pending request
+      const pendingBeforeSend = this.pendingRequests.size;
       this.pendingRequests.set(requestId, {
         resolve,
         reject,
@@ -437,6 +448,7 @@ export class McpUnity {
       });
 
       try {
+        this.logger.info(`Sending Unity request ${requestId} (${request.method}) while connection state is ${this.connectionState}; pending requests before send: ${pendingBeforeSend}`);
         this.connection.send(JSON.stringify(request));
         this.logger.debug(`Request sent: ${requestId}`);
       } catch (err) {
