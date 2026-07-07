@@ -14,10 +14,49 @@ using McpUnity.Resources;
 using Unity.EditorCoroutines.Editor;
 using System.Collections;
 using System.Collections.Specialized;
+using System.Collections.Concurrent;
 using McpUnity.Utils;
 
 namespace McpUnity.Unity
 {
+    /// <summary>
+    /// Drains work queued from background WebSocket threads on the Unity main thread via
+    /// EditorApplication.update, which keeps firing even when the Editor is unfocused.
+    ///
+    /// This replaces dispatching through EditorApplication.delayCall: delayCall is a plain
+    /// static delegate, and a "+=" performed from the WebSocketSharp background thread is not
+    /// reliably observed/drained by the main thread while the Editor is idle in the
+    /// background. The result was that requests received while Unity was not the foreground
+    /// app were never processed, and the MCP client timed out. Draining a thread-safe queue
+    /// from EditorApplication.update fixes this without relying on cross-thread delegate
+    /// mutation.
+    /// </summary>
+    [InitializeOnLoad]
+    internal static class McpMainThreadDispatcher
+    {
+        private static readonly ConcurrentQueue<Action> _queue = new ConcurrentQueue<Action>();
+
+        static McpMainThreadDispatcher()
+        {
+            EditorApplication.update -= Drain;
+            EditorApplication.update += Drain;
+        }
+
+        public static void Enqueue(Action action)
+        {
+            if (action != null) _queue.Enqueue(action);
+        }
+
+        private static void Drain()
+        {
+            while (_queue.TryDequeue(out var action))
+            {
+                try { action(); }
+                catch (Exception ex) { McpLogger.LogError($"MainThreadDispatcher action failed: {ex}"); }
+            }
+        }
+    }
+
     /// <summary>
     /// WebSocket handler for MCP Unity communications
     /// </summary>
@@ -73,7 +112,11 @@ namespace McpUnity.Unity
             }
 
             string data = e.Data;
-            EditorApplication.delayCall += () => HandleMessageAsync(data);
+            // Dispatch via a thread-safe queue drained in EditorApplication.update rather than
+            // EditorApplication.delayCall. A delayCall "+=" from this background thread is not
+            // reliably drained by the main thread while the Editor is unfocused/idle, so the
+            // request would never run and the client would time out. See McpMainThreadDispatcher.
+            McpMainThreadDispatcher.Enqueue(() => HandleMessageAsync(data));
         }
 
         /// <summary>
