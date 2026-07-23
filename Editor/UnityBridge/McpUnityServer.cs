@@ -762,8 +762,24 @@ namespace McpUnity.Unity
                     }
                     break;
                 case PlayModeStateChange.EnteredPlayMode:
+                    // The assumption above (server stays down through Play, a domain reload on exit
+                    // will restart it) only holds when Enter Play Mode Options are OFF or don't disable
+                    // domain reload. With "Reload Scene without Reload Domain" -- Project Settings >
+                    // Editor > Enter Play Mode Options, a real, supported Unity profile some projects
+                    // pick specifically for iteration speed -- NO domain reload happens on either side
+                    // of Play Mode, so nothing was ever going to bring the server back. That leaves it
+                    // down for the entire Play session, with no way for a client to even ask Unity to
+                    // exit Play, since that request needs this same server. Confirmed live: a client
+                    // got locked in Play with no way out until the Editor was closed by hand.
+                    // Restarting here covers both profiles: if a domain reload already restarted it via
+                    // OnAfterAssemblyReload, IsListening is already true and this is a no-op; if it
+                    // didn't, this is the only thing that brings it back.
+                    if (!_instance.IsListening && McpUnitySettings.Instance.AutoStartServer)
+                    {
+                        _instance.ScheduleStartServer(requireAutoStart: true, reason: "entered play mode");
+                    }
+                    break;
                 case PlayModeStateChange.ExitingPlayMode:
-                    // Server is disabled during play mode as domain reload will be triggered again when stopped.
                     break;
                 case PlayModeStateChange.EnteredEditMode:
                     // Returned to Edit Mode
