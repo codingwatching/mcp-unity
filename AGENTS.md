@@ -29,7 +29,6 @@
 │   ├── src/tools/                # MCP tool definitions (zod schema + handler)
 │   ├── src/resources/            # MCP resource definitions
 │   └── src/unity/mcpUnity.ts      # WebSocket client that talks to Unity
-└── server.json                   # MCP registry metadata (name/version/package)
 ```
 
 ### Quickstart (local dev)
@@ -117,7 +116,6 @@ Node reads config from `../ProjectSettings/McpUnitySettings.json` relative to **
 - Update versions consistently:
   - Unity package `package.json` (`version`)
   - Node server `Server~/package.json` (`version`)
-  - MCP registry `server.json` (`version` + npm identifier/version)
 - Rebuild Node output: `cd Server~ && npm run build`
 
 ### Available tools (current)
