@@ -457,6 +457,8 @@ namespace McpUnity.Unity
 
         private void CleanupFailedStart(WebSocketServer webSocketServer)
         {
+            McpBackgroundTick.Stop();
+
             if (webSocketServer == null)
             {
                 Clients.Clear();
