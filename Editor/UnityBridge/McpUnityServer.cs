@@ -39,8 +39,8 @@ namespace McpUnity.Unity
         private readonly Dictionary<string, McpToolBase> _tools = new Dictionary<string, McpToolBase>();
         private readonly Dictionary<string, McpResourceBase> _resources = new Dictionary<string, McpResourceBase>();
 
-        private const int DelayedStartMaxAttempts = 3;
-        private const double DelayedStartDelaySeconds = 0.1;
+        private const int DelayedStartMaxAttempts = 10;
+        private static readonly double[] DelayedStartRetryDelaySeconds = { 0.25d, 0.5d, 1d, 2d, 3d, 5d };
 
         private WebSocketServer _webSocketServer;
         private CancellationTokenSource _cts;
@@ -50,6 +50,7 @@ namespace McpUnity.Unity
         private bool _delayedStartRequiresAutoStart;
         private int _delayedStartAttempt;
         private double _delayedStartEarliestTime;
+        private string _delayedStartReason;
         private int _connectionGeneration;
         private int _activeConnectionGeneration;
 
@@ -89,6 +90,27 @@ namespace McpUnity.Unity
         public bool IsListening => _webSocketServer?.IsListening ?? false;
 
         /// <summary>
+        /// True when a delayed start or retry is waiting for Unity/editor socket cleanup.
+        /// </summary>
+        public bool HasScheduledStart => _delayedStartScheduled;
+
+        /// <summary>
+        /// Human-readable status for scheduled restart attempts.
+        /// </summary>
+        public string ScheduledStartStatus
+        {
+            get
+            {
+                if (!_delayedStartScheduled)
+                {
+                    return string.Empty;
+                }
+
+                return $"Retrying port {McpUnitySettings.Instance.Port} (attempt {_delayedStartAttempt}/{DelayedStartMaxAttempts})";
+            }
+        }
+
+        /// <summary>
         /// Thread-safe dictionary of connected clients with this server.
         /// WebSocketSharp dispatches OnOpen/OnClose on thread pool threads,
         /// so concurrent access must be safe.
@@ -117,7 +139,7 @@ namespace McpUnity.Unity
         public void StartServer()
         {
             CancelScheduledStart();
-            StartServerInternal(logAddressInUseAsError: true);
+            ScheduleStartServer(requireAutoStart: false, reason: "manual start");
         }
 
         /// <summary>
@@ -147,11 +169,7 @@ namespace McpUnity.Unity
 
             try
             {
-                // If a custom close code is provided, close all client connections with that code first
-                if (closeCode.HasValue && _webSocketServer != null)
-                {
-                    CloseAllClients(closeCode.Value, closeReason ?? "Server stopping");
-                }
+                CloseAllClients(closeCode ?? 1000, closeReason ?? "Server stopping");
 
                 _webSocketServer?.Stop();
 
@@ -261,7 +279,7 @@ namespace McpUnity.Unity
             }
         }
 
-        private StartServerResult StartServerInternal(bool logAddressInUseAsError)
+        private StartServerResult StartServerInternal(bool logAddressInUseAsError, int attempt = 1, double nextRetryDelaySeconds = 0)
         {
             // Skip starting server if this is a Multiplayer Play Mode clone instance
             // Only the main editor should run the WebSocket server to avoid port conflicts
@@ -288,6 +306,7 @@ namespace McpUnity.Unity
                 int connectionGeneration = Interlocked.Increment(ref _connectionGeneration);
                 var host = McpUnitySettings.Instance.AllowRemoteConnections ? "0.0.0.0" : "localhost";
                 webSocketServer = new WebSocketServer($"ws://{host}:{McpUnitySettings.Instance.Port}");
+                webSocketServer.Log.Output = (data, path) => { };
                 webSocketServer.AddWebSocketService("/McpUnity", () => new McpUnitySocketHandler(this, connectionGeneration));
                 webSocketServer.Start();
                 _webSocketServer = webSocketServer;
@@ -305,7 +324,7 @@ namespace McpUnity.Unity
                 }
                 else
                 {
-                    McpLogger.LogWarning($"{message} Retrying shortly.");
+                    McpLogger.LogWarning($"{message} Attempt {attempt}/{DelayedStartMaxAttempts}; retrying in {nextRetryDelaySeconds:0.##}s.");
                 }
 
                 return StartServerResult.AddressAlreadyInUse;
@@ -318,19 +337,31 @@ namespace McpUnity.Unity
             }
         }
 
+        private static double GetDelayedStartDelaySeconds(int attempt)
+        {
+            int normalizedAttempt = Math.Max(attempt, 1);
+            int delayIndex = Math.Min(normalizedAttempt - 1, DelayedStartRetryDelaySeconds.Length - 1);
+            return DelayedStartRetryDelaySeconds[delayIndex];
+        }
+
         private void ScheduleStartServer(bool requireAutoStart, string reason, int attempt = 1)
         {
+            int normalizedAttempt = Math.Min(Math.Max(attempt, 1), DelayedStartMaxAttempts);
             if (_delayedStartScheduled)
             {
                 _delayedStartRequiresAutoStart = _delayedStartRequiresAutoStart && requireAutoStart;
+                _delayedStartAttempt = Math.Max(_delayedStartAttempt, normalizedAttempt);
+                _delayedStartReason = reason;
                 return;
             }
 
             _delayedStartScheduled = true;
             _delayedStartRequiresAutoStart = requireAutoStart;
-            _delayedStartAttempt = Math.Min(Math.Max(attempt, 1), DelayedStartMaxAttempts);
-            _delayedStartEarliestTime = EditorApplication.timeSinceStartup + DelayedStartDelaySeconds;
-            McpLogger.LogInfo($"WebSocket server start scheduled after delay ({reason}).");
+            _delayedStartAttempt = normalizedAttempt;
+            _delayedStartReason = reason;
+            double delaySeconds = GetDelayedStartDelaySeconds(normalizedAttempt);
+            _delayedStartEarliestTime = EditorApplication.timeSinceStartup + delaySeconds;
+            McpLogger.LogInfo($"WebSocket server start scheduled in {delaySeconds:0.##}s ({reason}, attempt {normalizedAttempt}/{DelayedStartMaxAttempts}).");
             EditorApplication.delayCall += StartServerAfterDelay;
             EditorApplication.update += StartServerAfterDelayOnUpdate;
         }
@@ -348,6 +379,7 @@ namespace McpUnity.Unity
             _delayedStartRequiresAutoStart = false;
             _delayedStartAttempt = 0;
             _delayedStartEarliestTime = 0;
+            _delayedStartReason = null;
         }
 
         private void StartServerAfterDelay()
@@ -390,9 +422,11 @@ namespace McpUnity.Unity
 
             bool requireAutoStart = _delayedStartRequiresAutoStart;
             int attempt = Math.Min(Math.Max(_delayedStartAttempt, 1), DelayedStartMaxAttempts);
+            string reason = _delayedStartReason;
             _delayedStartRequiresAutoStart = false;
             _delayedStartAttempt = 0;
             _delayedStartEarliestTime = 0;
+            _delayedStartReason = null;
 
             if (Application.isBatchMode || _instance != this)
             {
@@ -411,10 +445,11 @@ namespace McpUnity.Unity
             }
 
             bool isFinalAttempt = attempt >= DelayedStartMaxAttempts;
-            StartServerResult result = StartServerInternal(logAddressInUseAsError: isFinalAttempt);
+            double nextRetryDelaySeconds = isFinalAttempt ? 0 : GetDelayedStartDelaySeconds(attempt + 1);
+            StartServerResult result = StartServerInternal(isFinalAttempt, attempt, nextRetryDelaySeconds);
             if (result == StartServerResult.AddressAlreadyInUse && !isFinalAttempt)
             {
-                ScheduleStartServer(requireAutoStart, "port still in use", attempt + 1);
+                ScheduleStartServer(requireAutoStart, reason ?? "port still in use", attempt + 1);
             }
         }
 
@@ -451,7 +486,7 @@ namespace McpUnity.Unity
         /// <summary>
         /// Close all connected clients with a specific close code
         /// </summary>
-        /// <param name="closeCode">WebSocket close code (4000-4999 for application use)</param>
+        /// <param name="closeCode">WebSocket close code</param>
         /// <param name="reason">Reason message for the close</param>
         private void CloseAllClients(ushort closeCode, string reason)
         {
@@ -509,6 +544,10 @@ namespace McpUnity.Unity
             SendConsoleLogTool sendConsoleLogTool = new SendConsoleLogTool();
             _tools.Add(sendConsoleLogTool.Name, sendConsoleLogTool);
             
+            // Register GetConsoleLogsTool
+            GetConsoleLogsTool getConsoleLogsTool = new GetConsoleLogsTool(_consoleLogsService);
+            _tools.Add(getConsoleLogsTool.Name, getConsoleLogsTool);
+            
             // Register UpdateComponentTool
             UpdateComponentTool updateComponentTool = new UpdateComponentTool();
             _tools.Add(updateComponentTool.Name, updateComponentTool);
@@ -540,6 +579,14 @@ namespace McpUnity.Unity
             // Register GetSceneInfoTool
             GetSceneInfoTool getSceneInfoTool = new GetSceneInfoTool();
             _tools.Add(getSceneInfoTool.Name, getSceneInfoTool);
+
+            // Register GetPlayModeStatusTool
+            GetPlayModeStatusTool getPlayModeStatusTool = new GetPlayModeStatusTool();
+            _tools.Add(getPlayModeStatusTool.Name, getPlayModeStatusTool);
+
+            // Register SetPlayModeStatusTool
+            SetPlayModeStatusTool setPlayModeStatusTool = new SetPlayModeStatusTool();
+            _tools.Add(setPlayModeStatusTool.Name, setPlayModeStatusTool);
 
             // Register UnloadSceneTool
             UnloadSceneTool unloadSceneTool = new UnloadSceneTool();
@@ -715,8 +762,24 @@ namespace McpUnity.Unity
                     }
                     break;
                 case PlayModeStateChange.EnteredPlayMode:
+                    // The assumption above (server stays down through Play, a domain reload on exit
+                    // will restart it) only holds when Enter Play Mode Options are OFF or don't disable
+                    // domain reload. With "Reload Scene without Reload Domain" -- Project Settings >
+                    // Editor > Enter Play Mode Options, a real, supported Unity profile some projects
+                    // pick specifically for iteration speed -- NO domain reload happens on either side
+                    // of Play Mode, so nothing was ever going to bring the server back. That leaves it
+                    // down for the entire Play session, with no way for a client to even ask Unity to
+                    // exit Play, since that request needs this same server. Confirmed live: a client
+                    // got locked in Play with no way out until the Editor was closed by hand.
+                    // Restarting here covers both profiles: if a domain reload already restarted it via
+                    // OnAfterAssemblyReload, IsListening is already true and this is a no-op; if it
+                    // didn't, this is the only thing that brings it back.
+                    if (!_instance.IsListening && McpUnitySettings.Instance.AutoStartServer)
+                    {
+                        _instance.ScheduleStartServer(requireAutoStart: true, reason: "entered play mode");
+                    }
+                    break;
                 case PlayModeStateChange.ExitingPlayMode:
-                    // Server is disabled during play mode as domain reload will be triggered again when stopped.
                     break;
                 case PlayModeStateChange.EnteredEditMode:
                     // Returned to Edit Mode

@@ -143,6 +143,74 @@ describe('Request timeout handling', () => {
   });
 });
 
+describe('Unity request/response diagnostics', () => {
+  const createMockLogger = () => ({
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn()
+  });
+
+  it('logs request id and connection state when sending to Unity', async () => {
+    const logger = createMockLogger();
+    const unity = new McpUnity(logger as any, { queueingEnabled: false });
+    const connection = {
+      isConnected: true,
+      isConnecting: false,
+      connectionState: ConnectionState.Connected,
+      send: jest.fn(),
+      connect: jest.fn(),
+      disconnect: jest.fn(),
+      removeAllListeners: jest.fn(),
+      forceReconnect: jest.fn(),
+      getStats: jest.fn(() => ({
+        state: ConnectionState.Connected,
+        reconnectAttempt: 0,
+        timeSinceLastPong: 0
+      }))
+    };
+
+    (unity as any).connection = connection;
+
+    const promise = unity.sendRequest({
+      id: 'request-diagnostics',
+      method: 'get_scene_info',
+      params: {}
+    });
+
+    (unity as any).handleMessage(JSON.stringify({
+      id: 'request-diagnostics',
+      result: { success: true }
+    }));
+
+    await expect(promise).resolves.toEqual({ success: true });
+    expect(logger.info).toHaveBeenCalledWith(
+      'Sending Unity request request-diagnostics (get_scene_info) while connection state is connected; pending requests before send: 0'
+    );
+    expect(logger.info).toHaveBeenCalledWith(
+      'Received Unity response for request request-diagnostics; pending requests before match: 1'
+    );
+
+    await unity.stop();
+  });
+
+  it('logs ignored Unity responses without a matching pending request', async () => {
+    const logger = createMockLogger();
+    const unity = new McpUnity(logger as any, { queueingEnabled: false });
+
+    (unity as any).handleMessage(JSON.stringify({
+      id: 'unknown-request',
+      result: { success: true }
+    }));
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Ignoring Unity response for unknown request unknown-request; pending requests: 0'
+    );
+
+    await unity.stop();
+  });
+});
+
 describe('Transform schema compatibility', () => {
   const mockSendRequest = jest.fn();
   const mockMcpUnity = { sendRequest: mockSendRequest };

@@ -32,7 +32,7 @@ namespace McpUnity.Unity
         public bool AutoStartServer = true;
         
         [Tooltip("Whether to show info logs in the Unity console")]
-        public bool EnableInfoLogs = true;
+        public bool EnableInfoLogs = false;
 
         [Tooltip("Optional: Full path to the npm executable (e.g., /Users/user/.asdf/shims/npm or C:\\path\\to\\npm.cmd). If not set, 'npm' from the system PATH will be used.")]
         public string NpmExecutablePath = string.Empty;

@@ -21,8 +21,8 @@ namespace McpUnity.Tests
         [SetUp]
         public void SetUp()
         {
-            // Get the server instance to access registered tools
-            _batchTool = new BatchExecuteTool(McpUnityServer.Instance);
+            _batchTool = new BatchExecuteTool(name =>
+                name == "get_scene_info" ? new GetSceneInfoTool() : null);
         }
 
         [TearDown]

@@ -176,6 +176,27 @@ describe('UnityConnection', () => {
     });
   });
 
+  describe('WebSocket options', () => {
+    it('sends the MCP client name as a header without setting WebSocket origin', async () => {
+      const connectPromise = connection.connect();
+
+      expect(mockWebSocketConstructor).toHaveBeenCalledWith(
+        'ws://localhost:8090/McpUnity',
+        {
+          headers: {
+            'X-Client-Name': 'TestClient'
+          }
+        }
+      );
+
+      const [, options] = mockWebSocketConstructor.mock.calls[0];
+      expect(options).not.toHaveProperty('origin');
+
+      mockWebSocketInstances[0].onopen();
+      await connectPromise;
+    });
+  });
+
   describe('forceReconnect', () => {
     it('should trigger connecting state', () => {
       connection.forceReconnect();
