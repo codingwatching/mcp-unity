@@ -160,6 +160,7 @@ namespace McpUnity.Unity
         {
             CancelScheduledStart();
             _activeConnectionGeneration = 0;
+            McpBackgroundTick.Stop();
 
             if (_webSocketServer == null)
             {
@@ -311,6 +312,7 @@ namespace McpUnity.Unity
                 webSocketServer.Start();
                 _webSocketServer = webSocketServer;
                 _activeConnectionGeneration = connectionGeneration;
+                McpBackgroundTick.Start();
                 McpLogger.LogInfo($"WebSocket server started successfully on {host}:{McpUnitySettings.Instance.Port}.");
                 return StartServerResult.Started;
             }
@@ -756,10 +758,7 @@ namespace McpUnity.Unity
             {
                 case PlayModeStateChange.ExitingEditMode:
                     // About to enter Play Mode - use custom close code so clients use fast polling
-                    if (_instance.IsListening)
-                    {
-                        _instance.StopServer(UnityCloseCode.PlayMode, "Unity entering Play mode");
-                    }
+                    _instance.StopServer(UnityCloseCode.PlayMode, "Unity entering Play mode");
                     break;
                 case PlayModeStateChange.EnteredPlayMode:
                     // The assumption above (server stays down through Play, a domain reload on exit

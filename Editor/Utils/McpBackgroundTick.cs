@@ -1,69 +1,110 @@
-#if UNITY_EDITOR_WIN
+#if UNITY_EDITOR
 using System;
 using System.Runtime.InteropServices;
-using UnityEditor;
+using System.Threading;
 
 namespace McpUnity.Utils
 {
     /// <summary>
-    /// Keeps the Unity Editor loop ticking while the editor window is unfocused.
-    ///
-    /// Unity 6.4 on Windows parks the editor tick loop entirely when the editor
-    /// is not the foreground application (regression of
-    /// https://github.com/CoderGamester/mcp-unity/issues/147), so callbacks
-    /// scheduled via EditorApplication.delayCall — which the WebSocket handler
-    /// relies on — never run and every MCP request times out.
-    ///
-    /// The main thread still pumps OS messages in the background (the window is
-    /// never reported "Not Responding"), so a native Win32 timer created on the
-    /// main thread keeps firing its callback there. From that callback we ask
-    /// Unity to run a player-loop update, which flushes delayCall, coroutines
-    /// and the synchronization context.
+    /// Keeps the Unity Editor loop ticking while the editor window is unfocused on Windows.
     /// </summary>
-    [InitializeOnLoad]
     internal static class McpBackgroundTick
     {
+#if UNITY_EDITOR_WIN
         private delegate void TimerProc(IntPtr hWnd, uint uMsg, UIntPtr nIDEvent, uint dwTime);
 
-        [DllImport("user32.dll")]
+        [DllImport("user32.dll", SetLastError = true)]
         private static extern UIntPtr SetTimer(IntPtr hWnd, UIntPtr nIDEvent, uint uElapse, TimerProc lpTimerFunc);
 
-        [DllImport("user32.dll")]
+        [DllImport("user32.dll", SetLastError = true)]
         private static extern bool KillTimer(IntPtr hWnd, UIntPtr uIDEvent);
 
         private const uint TickIntervalMs = 100;
 
-        // Rooted in a static field so the native timer never invokes a collected delegate.
+        // Rooted for the complete native timer lifetime so the callback cannot be collected.
         private static readonly TimerProc Callback = OnTimer;
         private static UIntPtr _timerId;
+        private static int _callbackRunning;
+#endif
 
-        static McpBackgroundTick()
+        /// <summary>
+        /// Starts the Windows background timer after the WebSocket server is listening.
+        /// </summary>
+        public static void Start()
         {
-            _timerId = SetTimer(IntPtr.Zero, UIntPtr.Zero, TickIntervalMs, Callback);
-
-            // The timer must not outlive the scripting domain: a native callback
-            // into an unloaded domain crashes the editor.
-            AssemblyReloadEvents.beforeAssemblyReload += () =>
+#if UNITY_EDITOR_WIN
+            if (_timerId != UIntPtr.Zero)
             {
-                if (_timerId != UIntPtr.Zero)
-                {
-                    KillTimer(IntPtr.Zero, _timerId);
-                    _timerId = UIntPtr.Zero;
-                }
-            };
+                return;
+            }
+
+            _timerId = SetTimer(IntPtr.Zero, UIntPtr.Zero, TickIntervalMs, Callback);
+            if (_timerId == UIntPtr.Zero)
+            {
+                McpLogger.LogError($"Failed to start background editor tick timer. Win32 error: {Marshal.GetLastWin32Error()}.");
+            }
+#endif
         }
 
-        private static void OnTimer(IntPtr hWnd, uint uMsg, UIntPtr nIDEvent, uint dwTime)
+        /// <summary>
+        /// Stops the Windows background timer. Safe to call repeatedly.
+        /// </summary>
+        public static void Stop()
         {
+#if UNITY_EDITOR_WIN
+            UIntPtr timerId = _timerId;
+            if (timerId == UIntPtr.Zero)
+            {
+                return;
+            }
+
             try
             {
-                EditorApplication.QueuePlayerLoopUpdate();
+                if (!KillTimer(IntPtr.Zero, timerId))
+                {
+                    McpLogger.LogWarning($"Failed to stop background editor tick timer. Win32 error: {Marshal.GetLastWin32Error()}.");
+                }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Never let an exception escape into the native timer dispatch.
+                McpLogger.LogError($"Error stopping background editor tick timer: {ex.Message}");
+            }
+            finally
+            {
+                _timerId = UIntPtr.Zero;
+            }
+#endif
+        }
+
+#if UNITY_EDITOR_WIN
+        private static void OnTimer(IntPtr hWnd, uint uMsg, UIntPtr nIDEvent, uint dwTime)
+        {
+            if (Interlocked.Exchange(ref _callbackRunning, 1) != 0)
+            {
+                return;
+            }
+
+            try
+            {
+                UnityEditor.EditorApplication.QueuePlayerLoopUpdate();
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    McpLogger.LogError($"Error during background editor tick: {ex.Message}");
+                }
+                catch
+                {
+                    // Nothing may escape the native callback boundary.
+                }
+            }
+            finally
+            {
+                Volatile.Write(ref _callbackRunning, 0);
             }
         }
+#endif
     }
 }
 #endif
